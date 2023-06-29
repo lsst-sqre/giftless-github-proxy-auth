@@ -10,7 +10,7 @@ from .cache import AuthenticationCache
 from .identity import Identity
 
 
-class GitHubProxyAuthenticator(giftless.auth.Authenticator):
+class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
     """When a request is received, check to see whether that request is
     authenticated with a personal access token that would give write access
     to the repository the request is for.

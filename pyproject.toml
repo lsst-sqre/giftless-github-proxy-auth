@@ -1,10 +1,10 @@
 [project]
 # https://packaging.python.org/en/latest/specifications/declaring-project-metadata/
-name = "github-proxy-auth"
+name = "giftless-github-proxy-auth"
 description = "Giftless module to proxy GitHub auth"
 license = { file = "LICENSE" }
 readme = "README.md"
-keywords = ["github","proxy","authentication","authorization","auth"]
+keywords = ["giftless", "github","proxy","authentication","authorization","auth"]
 # https://pypi.org/classifiers/
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -23,7 +23,7 @@ dependencies = []
 dynamic = ["version"]
 
 [project.urls]
-Source = "https://github.com/lsst-sqre/github-proxy-auth"
+Source = "https://github.com/lsst-sqre/giftless-github-proxy-auth"
 
 [build-system]
 requires = ["setuptools>=61", "wheel", "setuptools_scm[toml]>=6.2"]
@@ -34,7 +34,7 @@ build-backend = "setuptools.build_meta"
 [tool.coverage.run]
 parallel = true
 branch = true
-source = ["github_proxy_auth"]
+source = ["giftless_github_proxy_auth"]
 
 [tool.coverage.paths]
 source = ["src", ".tox/*/site-packages"]
@@ -74,7 +74,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 79
-known_first_party = ["github_proxy_auth", "tests"]
+known_first_party = ["giftless_github_proxy_auth", "tests"]
 skip = ["docs/conf.py"]
 
 [tool.pytest.ini_options]
