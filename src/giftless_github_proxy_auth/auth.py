@@ -35,12 +35,16 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
     def __call__(self, request: Request) -> Optional[Identity]:
         # Get the repo name
         parts = request.path.split("/")
-        org = parts[0]
-        repo_name = parts[1]
+        org = parts[1]
+        repo_name = parts[2]
         repo_path = org + "/" + repo_name
+        self._logger.debug(f"(headers): -> {request.headers}")
+        self._logger.debug(f"(cookies): -> {request.cookies}")
         # Extract the token
         if request.authorization is None:
-            self._logger.warning(f"Unauthorized request to {repo_path}")
+            self._logger.warning(
+                f"Request to {repo_path} has no Authorization header"
+            )
             return None
         token = request.authorization.password  # I think
         if token is None:
@@ -61,14 +65,13 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         gh = github.Github(auth=auth)
         # See whether token is valid
         self._logger.info(f"Checking validity for token for {repo_path}")
-        # For now let's propagate all exceptions (and remove token from cache)
         try:
             login = gh.get_user().login
             self._logger.debug(f"Token valid and belongs to {login}")
-        except Exception:
-            self._logger.warning("Token not valid")
+        except Exception as exc:
+            self._logger.warning(f"Token not valid: {exc}")
             asyncio.run(self._cache.remove(token))
-            raise
+            return None
         if identity is None:
             # We have a valid token for a user
             identity = Identity(name=login)
@@ -77,7 +80,13 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         # Get correct repository
         repo = gh.get_repo(repo_path)
         # See whether token gives us write access
-        perms = repo.get_collaborator_permission(login)
+        try:
+            perms = repo.get_collaborator_permission(login)
+        except Exception as exc:
+            self._logger.warning(
+                f"{login} has no permissions for {repo_path}: {exc}"
+            )
+            return None
         if perms in ("write", "admin"):
             # The answer is yes
             self._logger.debug(f"Token allows {login} write to {repo_path}")
@@ -88,6 +97,6 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         return None
 
 
-def read_write(**options: Any) -> GiftlessGitHubProxyAuthenticator:
+def factory(**options: Any) -> GiftlessGitHubProxyAuthenticator:
     """Allow read/write via proxy auth class."""
     return GiftlessGitHubProxyAuthenticator(**options)

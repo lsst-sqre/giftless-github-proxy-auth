@@ -26,3 +26,11 @@ run:
 .PHONY: wheel
 wheel:
 	python3 -m build
+
+.PHONY: docker
+PACKAGE_NAME := giftless
+REGISTRY := docker.io
+OWNER := lsstsqre
+TAG := ajt-dev
+docker:
+	docker build -t $(REGISTRY)/$(OWNER)/$(PACKAGE_NAME):$(TAG) .
