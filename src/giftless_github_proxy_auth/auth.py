@@ -62,11 +62,10 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         # Get correct repository
         repo = gh.get_repo(repo_path)
         # See whether token gives us write access
-        collabs = repo.get_collaborators()
-        for user in collabs:
-            if user.login == login:
-                # The answer is yes
-                identity.authorize_for_repo(repo_path)
-                return identity
+        perms = repo.get_collaborator_permission(login)
+        if perms in ("write", "admin"):
+            # The answer is yes
+            identity.authorize_for_repo(repo_path)
+            return identity
         identity.deauthorize_for_repo(repo_path)
         return None
