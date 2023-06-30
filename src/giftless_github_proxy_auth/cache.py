@@ -1,3 +1,5 @@
+from typing import Dict, Optional
+
 from giftless.auth.identity import Identity
 
 
@@ -8,7 +10,7 @@ class AuthenticationCache:
     just an in-memory data structure."""
 
     def __init__(self) -> None:
-        self._authed: dict[str, Identity] = {}
+        self._authed: Dict[str, Identity] = {}
 
     async def add(self, token: str, identity: Identity) -> None:
         self._authed[token] = identity
@@ -17,5 +19,5 @@ class AuthenticationCache:
         if token in self._authed:
             del self._authed[token]
 
-    async def check(self, token: str) -> Identity | None:
+    async def check(self, token: str) -> Optional[Identity]:
         return self._authed.get(token)

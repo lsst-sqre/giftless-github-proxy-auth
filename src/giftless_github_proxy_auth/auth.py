@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import logging
 import os
-from typing import Any
+from typing import Any, Optional
 
 import giftless
 import github
@@ -32,7 +32,7 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         else:
             self._logger.setLevel(logging.INFO)
 
-    def __call__(self, request: Request) -> Identity | None:
+    def __call__(self, request: Request) -> Optional[Identity]:
         # Get the repo name
         parts = request.path.split("/")
         org = parts[0]

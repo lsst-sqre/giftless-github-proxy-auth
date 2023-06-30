@@ -1,5 +1,6 @@
 import datetime
 from dataclasses import dataclass
+from typing import Dict, Optional
 
 import giftless
 from giftless.auth.identity import Permission
@@ -22,14 +23,14 @@ class Identity(giftless.auth.Identity):
     ) -> None:
         self.name = name
         self._expiration = expiration
-        self._auth: dict[str, RepoAccess] = {}
+        self._auth: Dict[str, RepoAccess] = {}
 
     def is_authorized(
         self,
         organization: str,
         repo: str,
         permission: Permission,
-        oid: str | None,
+        oid: Optional[str],
     ) -> bool:
         # We assume all our stuff is publicly readable.  So far, that's true.
         if permission != Permission.WRITE:
@@ -53,7 +54,7 @@ class Identity(giftless.auth.Identity):
             can_write=False, checked_time=datetime.datetime.now()
         )
 
-    def check_repo(self, repo_str: str) -> RepoAccess | None:
+    def check_repo(self, repo_str: str) -> Optional[RepoAccess]:
         """This lets us check for the unknown state and expiration too."""
         state = self._auth.get(repo_str)
         if state is None:
