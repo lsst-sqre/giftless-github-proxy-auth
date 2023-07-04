@@ -24,16 +24,13 @@ class GiftlessGitHubPreAuth(giftless.auth.PreAuthorizedActionAuthenticator):
         oid: Optional[str] = None,
         lifetime: Optional[int] = None,
     ) -> Dict[str, str]:
-        """This is stripped down from the JWT authenticator in giftless.
-        We don't want to create our own JWT, we just want to pass the
-        token through."""
-
-        return {"Authorization": f"Bearer {identity.token}"}
+        """The rest of the backend does the auth work with GCS."""
+        return {}
 
     def get_authz_query_params(
         self, *args: Any, **kwargs: Any
     ) -> Dict[str, str]:
-        return {}  # Not implemented
+        return {}
 
 
 class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
@@ -63,17 +60,15 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         org = parts[1]
         repo_name = parts[2]
         repo_path = org + "/" + repo_name
-        self._logger.debug(f"(headers): -> {request.headers}")
-        self._logger.debug(f"(cookies): -> {request.cookies}")
-        # Extract the token
         if request.authorization is None:
             self._logger.warning(
                 f"Request to {repo_path} has no Authorization header"
             )
             raise giftless.auth.Unauthorized("Authorization required")
-        token = request.authorization.password  # I think
+        # We have an Authorization header...
+        token = request.authorization.password
         if token is None:
-            self._logger.warning(f"No token sent for request to {repo_path}")
+            self._logger.warning(f"Request to {repo_path} has no auth token")
             raise giftless.auth.Unauthorized("Authorization token required")
         auth = github.Auth.Token(token)
         # Check the cache
@@ -97,14 +92,14 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         gh = github.Github(auth=auth)
         try:
             login = gh.get_user().login
-            self._logger.debug(f"Token valid and belongs to {login}")
+            self._logger.debug(f"Token valid and belongs to GH:{login}")
         except Exception as exc:
-            self._logger.warning(f"Token not valid: {exc}")
+            self._logger.warning(f"Token not valid for GH: {exc}")
             asyncio.run(self._cache.remove(token))
             return None
         if identity is None:
             # We have a valid token for a user
-            identity = Identity(name=login, token=token)
+            identity = Identity(name=login)
             self._logger.debug(f"Storing token for {login}")
             asyncio.run(self._cache.add(token, identity))
         # Get correct repository
@@ -114,15 +109,15 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
             perms = repo.get_collaborator_permission(login)
         except Exception as exc:
             self._logger.warning(
-                f"{login} has no permissions for {repo_path}: {exc}"
+                f"{login} has no permissions for GH:{repo_path}: {exc}"
             )
             return None
         if perms in ("write", "admin"):
             # The answer is yes
-            self._logger.debug(f"Token allows {login} write to {repo_path}")
+            self._logger.debug(f"Token allows {login} write to GH:{repo_path}")
             identity.authorize_for_repo(repo_path)
             return identity
-        self.logger.warning(f"Token forbids {login} write to {repo_path}")
+        self.logger.warning(f"Token forbids {login} write to GH:{repo_path}")
         identity.deauthorize_for_repo(repo_path)
         return None
 
