@@ -45,11 +45,11 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
             self._logger.warning(
                 f"Request to {repo_path} has no Authorization header"
             )
-            return None
+            raise giftless.auth.Unauthorized("Authorization required")
         token = request.authorization.password  # I think
         if token is None:
             self._logger.warning(f"No token sent for request to {repo_path}")
-            return None
+            raise giftless.auth.Unauthorized("Authorization token required")
         auth = github.Auth.Token(token)
         # Check the cache
         identity = asyncio.run(self._cache.check(token))
