@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Set
 
 import giftless
 import github
@@ -10,6 +10,30 @@ from flask import Request
 
 from .cache import AuthenticationCache
 from .identity import Identity
+
+
+class GiftlessGitHubPreAuth(giftless.auth.PreAuthorizedActionAuthenticator):
+    """Set up action authorization; called by the Authenticator."""
+
+    def get_authz_query_token(
+        self,
+        identity: Identity,
+        org: str = "",
+        repo: str = "",
+        actions: Optional[Set[str]] = None,
+        oid: Optional[str] = None,
+        lifetime: Optional[int] = None,
+    ) -> Dict[str, str]:
+        """This is stripped down from the JWT authenticator in giftless.
+        We don't want to create our own JWT, we just want to pass the
+        token through."""
+
+        return {"Authorization": f"Bearer {identity.token}"}
+
+    def get_authz_query_params(
+        self, *args: Any, **kwargs: Any
+    ) -> Dict[str, str]:
+        return {}  # Not implemented
 
 
 class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
@@ -31,6 +55,7 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
             self._logger.setLevel(logging.DEBUG)
         else:
             self._logger.setLevel(logging.INFO)
+        self.preauth_handler = GiftlessGitHubPreAuth()
 
     def __call__(self, request: Request) -> Optional[Identity]:
         # Get the repo name
@@ -61,10 +86,15 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
             if id_state is True:
                 self._logger.debug(f"Token authorized for {repo_path}")
                 return identity
-        # The identity state for this repo is unknown
-        gh = github.Github(auth=auth)
         # See whether token is valid
         self._logger.info(f"Checking validity for token for {repo_path}")
+        if token.startswith("gt-"):
+            # Gafaelfawr token
+            self._logger.warning("Gafaelfawr auth not yet implemented")
+            return None
+        # Assume it's a GitHub token (begins with "ghp_")
+        # The identity state for this repo is unknown
+        gh = github.Github(auth=auth)
         try:
             login = gh.get_user().login
             self._logger.debug(f"Token valid and belongs to {login}")
@@ -74,7 +104,7 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
             return None
         if identity is None:
             # We have a valid token for a user
-            identity = Identity(name=login)
+            identity = Identity(name=login, token=token)
             self._logger.debug(f"Storing token for {login}")
             asyncio.run(self._cache.add(token, identity))
         # Get correct repository

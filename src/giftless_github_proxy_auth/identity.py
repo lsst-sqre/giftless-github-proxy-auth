@@ -19,9 +19,11 @@ class Identity(giftless.auth.Identity):
     def __init__(
         self,
         name: str,
+        token: str,
         expiration: datetime.timedelta = datetime.timedelta(minutes=15),
     ) -> None:
         self.name = name
+        self.token = token
         self._expiration = expiration
         self._auth: Dict[str, RepoAccess] = {}
 
