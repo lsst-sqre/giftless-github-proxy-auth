@@ -1,0 +1,24 @@
+diff --git a/giftless/schema.py b/giftless/schema.py
+--- a/giftless/schema.py
++++ b/giftless/schema.py
+@@ -16,6 +16,12 @@
+     download = 'download'
+
+
++class HashAlgo(Enum):
++    """Batch operations
++    """
++    sha256 = 'sha256'
++
++
+ class RefSchema(ma.Schema):  # type: ignore
+     """ref field schema
+     """
+@@ -48,6 +54,7 @@
+     transfers = fields.List(fields.String, required=False, missing=['basic'])
+     ref = fields.Nested(RefSchema, required=False)
+     objects = fields.Nested(ObjectSchema, validate=validate.Length(min=1), many=True, required=True)
++    hash_algo = EnumField(HashAlgo, required=False)
+
+
+ batch_request_schema = BatchRequest()

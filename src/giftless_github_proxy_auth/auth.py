@@ -12,37 +12,23 @@ from .cache import AuthenticationCache
 from .identity import Identity
 
 
-class GiftlessGitHubPreAuth(giftless.auth.PreAuthorizedActionAuthenticator):
-    """Set up action authorization; called by the Authenticator."""
-
-    def get_authz_query_token(
-        self,
-        identity: Identity,
-        org: str = "",
-        repo: str = "",
-        actions: Optional[Set[str]] = None,
-        oid: Optional[str] = None,
-        lifetime: Optional[int] = None,
-    ) -> Dict[str, str]:
-        """The rest of the backend does the auth work with GCS."""
-        return {}
-
-    def get_authz_query_params(
-        self, *args: Any, **kwargs: Any
-    ) -> Dict[str, str]:
-        return {}
-
-
-class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
+class GiftlessGitHubProxyAuthenticator(
+    giftless.auth.Authenticator, giftless.auth.PreAuthorizedActionAuthenticator
+):
     """When a request is received, check to see whether that request is
-    authenticated with a personal access token that would give write access
-    to the repository the request is for.
+    authenticated with a GitHub personal access token that would give write
+    access to the repository the request is for.
+
+    Leave room for authenticating with a Gafaelfawr token.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._expiration = datetime.timedelta(minutes=5)
         if "expiration" in kwargs:
             self._expiration = kwargs.pop("expiration")
+        self._identity: Optional[Identity] = None
+        if "identity" in kwargs:
+            self._identity = kwargs.pop("identity")
         super().__init__(*args, **kwargs)
         self._cache = AuthenticationCache()
         self._loop = asyncio.new_event_loop()
@@ -52,7 +38,7 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
             self._logger.setLevel(logging.DEBUG)
         else:
             self._logger.setLevel(logging.INFO)
-        self.preauth_handler = GiftlessGitHubPreAuth()
+        self.preauth_handler = self
 
     def __call__(self, request: Request) -> Optional[Identity]:
         # Get the repo name
@@ -60,28 +46,46 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         org = parts[1]
         repo_name = parts[2]
         repo_path = org + "/" + repo_name
+        token: Optional[str] = None
         if request.authorization is None:
-            self._logger.warning(
-                f"Request to {repo_path} has no Authorization header"
-            )
-            raise giftless.auth.Unauthorized("Authorization required")
-        # We have an Authorization header...
-        token = request.authorization.password
+            if self._identity is None:
+                self._logger.warning(
+                    f"Request to {repo_path} has no Authorization header"
+                )
+                raise giftless.auth.Unauthorized("Authorization required")
+            else:
+                token = self._identity.token
+        else:
+            token = request.authorization.password
         if token is None:
             self._logger.warning(f"Request to {repo_path} has no auth token")
             raise giftless.auth.Unauthorized("Authorization token required")
         auth = github.Auth.Token(token)
         # Check the cache
         identity = asyncio.run(self._cache.check(token))
+        if (
+            self._identity is not None
+            and identity is not None
+            and identity.id != self._identity.id
+        ):
+            self._logger.warning(
+                f"Token is for {identity.id}, not {self._identity.id}"
+            )
+            return None
         if identity is not None:
+            # We found the token in our cache.
             id_state = identity.check_repo(repo_path)
+            self._identity = identity
             if id_state is False:
                 self._logger.warning(f"Token not authorized for {repo_path}")
                 return None
-            if id_state is True:
+            elif id_state is True:
                 self._logger.debug(f"Token authorized for {repo_path}")
                 return identity
-        # See whether token is valid
+            else:
+                # id_state is None
+                self._logger.debug("Token for {identity.id} not in cache")
+        # Token is not in cache; see whether it is valid
         self._logger.info(f"Checking validity for token for {repo_path}")
         if token.startswith("gt-"):
             # Gafaelfawr token
@@ -99,9 +103,10 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
             return None
         if identity is None:
             # We have a valid token for a user
-            identity = Identity(name=login)
+            identity = Identity(name=login, token=token)
             self._logger.debug(f"Storing token for {login}")
             asyncio.run(self._cache.add(token, identity))
+            self._identity = identity
         # Get correct repository
         repo = gh.get_repo(repo_path)
         # See whether token gives us write access
@@ -120,6 +125,36 @@ class GiftlessGitHubProxyAuthenticator(giftless.auth.Authenticator):
         self.logger.warning(f"Token forbids {login} write to GH:{repo_path}")
         identity.deauthorize_for_repo(repo_path)
         return None
+
+    def get_authz_header(
+        self,
+        identity: Optional[Identity] = None,
+        org: str = "",
+        repo: str = "",
+        actions: Optional[Set[str]] = None,
+        oid: Optional[str] = None,
+        lifetime: Optional[int] = None,
+    ) -> Dict[str, str]:
+        if identity is None:
+            if self._identity is None:
+                self._logger.warning("No identity found for authorization")
+                return {}
+            identity = self._identity
+        """We can use this as a pre-auth class too."""
+        return {"Authorization": f"Bearer {identity.token}"}
+
+    def get_authz_query_params(
+        self,
+        identity: Optional[Identity] = None,
+        org: str = "",
+        repo: str = "",
+        actions: Optional[Set[str]] = None,
+        oid: Optional[str] = None,
+        lifetime: Optional[int] = None,
+    ) -> Dict[str, str]:
+        return self.get_authz_header(
+            identity, org, repo, actions, oid, lifetime
+        )
 
 
 def factory(**options: Any) -> GiftlessGitHubProxyAuthenticator:

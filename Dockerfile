@@ -7,7 +7,8 @@ USER root
 RUN  DEBIAN_FRONTEND=noninteractive apt-get update && \
        apt-get install -y git make
 
-# First, rebuild the image.  The pypi tag is very stale
+# First, rebuild the image.  The pypi tag is very stale and the released
+# version does not work (but master does)
 ARG  SW=/opt/lsst/software
 ARG  V="0.5.1dev0"
 
@@ -16,6 +17,12 @@ RUN  mkdir -p $SW && \
       rm -rf /app
 RUN  git clone https://github.com/datopian/giftless /app && \
       echo $V > /app/VERSION
+# This is from an issue that was never turned into a PR, even though the
+# issue contains the fix.  IDK, man.
+COPY patch/schema_hash_algo.diff /app
+RUN  cd /app && \
+     patch -p1 < schema_hash_algo.diff
+
 RUN  cd /app && \
      make requirements.txt && \
      pip install --upgrade --force-reinstall /app
